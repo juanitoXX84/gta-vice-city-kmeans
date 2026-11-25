@@ -1,0 +1,112 @@
+from pathlib import Path
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+RUTA_CSV = Path(__file__).resolve().parent / 'data' / 'reseñas_gta_vice_city.csv'
+CARPETA_GRAFICAS = Path(__file__).resolve().parent / 'graficas'
+
+def cargar_y_explorar(df: pd.DataFrame) -> None:
+    print('=' * 60)
+    print('1. CARGA Y EXPLORACIÓN GENERAL')
+    print('=' * 60)
+    print('\nPrimeros 10 registros:')
+    print(df.head(10))
+    print(f'\nDimensiones del dataset: {df.shape[0]} filas, {df.shape[1]} columnas')
+    print('\nNombres de las columnas:')
+    print(list(df.columns))
+    print('\nTipos de datos:')
+    print(df.dtypes)
+    print('\nEstadísticas descriptivas:')
+    print(df.describe(include='all'))
+    print('\nValores nulos por columna:')
+    print(df.isnull().sum())
+    duplicados_filas = df.duplicated().sum()
+    duplicados_id = df.duplicated(subset=['recommendationid']).sum()
+    duplicados_texto = df.duplicated(subset=['review_text']).sum()
+    print(f'\nRegistros duplicados (fila completa idéntica): {duplicados_filas}')
+    print(f'Registros duplicados (mismo recommendationid): {duplicados_id}')
+    print(f'Registros duplicados (mismo review_text): {duplicados_texto}')
+
+def analizar_variables(df: pd.DataFrame) -> None:
+    print('\n' + '=' * 60)
+    print('2. ANÁLISIS DE LAS VARIABLES')
+    print('=' * 60)
+    positivas = df['recommended'].sum()
+    negativas = (~df['recommended']).sum()
+    print(f'\nrecommended (¿recomienda el juego?): {positivas} positivas, {negativas} negativas.')
+    print('  Utilidad: indica la valoración binaria del usuario; útil como variable')
+    print('  numérica (0/1) para agrupar perfiles de satisfacción.')
+    print('\ntimestamp_created (fecha Unix de publicación):')
+    print(f"  Mínimo: {df['timestamp_created'].min()}, máximo: {df['timestamp_created'].max()}")
+    print('  Utilidad: permite ver cuándo se publicaron las reseñas; en etapas')
+    print('  posteriores puede convertirse a variables numéricas (año, mes, antigüedad).')
+    print('\nvotes_up (votos útiles de la reseña):')
+    print(f"  Media: {df['votes_up'].mean():.2f}, máximo: {df['votes_up'].max()}")
+    print('  Utilidad: mide repercusión o acuerdo de la comunidad con cada opinión.')
+    print('\nplaytime_forever (minutos totales jugados en Steam):')
+    print(f"  Media: {df['playtime_forever'].mean():.0f} min, mediana: {df['playtime_forever'].median():.0f} min")
+    print('  Utilidad: diferencia jugadores casuales vs. veteranos; puede correlacionarse')
+    print('  con el tono de la reseña.')
+    textos_no_vacios = df['review_text'].notna().sum()
+    longitud_media = df['review_text'].dropna().str.len().mean()
+    print('\nreview_text (texto de la reseña):')
+    print(f"  Reseñas con texto: {textos_no_vacios}, sin texto o nulo: {df['review_text'].isna().sum()}")
+    print(f'  Longitud media del texto (caracteres): {longitud_media:.1f}')
+    print('  Utilidad: contiene la opinión cualitativa; para K-Means habrá que convertirla')
+    print('  a números (longitud, TF-IDF, sentimiento, etc.) en una etapa posterior.')
+
+def crear_graficas(df: pd.DataFrame) -> None:
+    CARPETA_GRAFICAS.mkdir(parents=True, exist_ok=True)
+    sns.set_theme(style='whitegrid', font_scale=1.05)
+    (fig, ax) = plt.subplots(figsize=(7, 5))
+    conteo = df['recommended'].value_counts().sort_index()
+    etiquetas = ['No recomienda', 'Recomienda']
+    valores = [conteo.get(False, 0), conteo.get(True, 0)]
+    colores = ['#e74c3c', '#2ecc71']
+    sns.barplot(x=etiquetas, y=valores, hue=etiquetas, palette=colores, legend=False, ax=ax)
+    ax.set_title('Distribución de reseñas positivas y negativas')
+    ax.set_xlabel('Valoración del usuario')
+    ax.set_ylabel('Número de reseñas')
+    for (i, v) in enumerate(valores):
+        ax.text(i, v + 5, str(v), ha='center')
+    fig.tight_layout()
+    fig.savefig(CARPETA_GRAFICAS / 'distribucion_recomendacion.png', dpi=120)
+    plt.close(fig)
+    (fig, ax) = plt.subplots(figsize=(8, 5))
+    sns.histplot(df['playtime_forever'], bins=30, kde=True, color='#3498db', ax=ax)
+    ax.set_title('Distribución del tiempo de juego (playtime_forever)')
+    ax.set_xlabel('Minutos totales jugados')
+    ax.set_ylabel('Frecuencia')
+    fig.tight_layout()
+    fig.savefig(CARPETA_GRAFICAS / 'distribucion_tiempo_juego.png', dpi=120)
+    plt.close(fig)
+    (fig, ax) = plt.subplots(figsize=(8, 5))
+    sns.histplot(df['votes_up'], bins=range(0, int(df['votes_up'].max()) + 2), color='#9b59b6', ax=ax)
+    ax.set_title('Distribución de votos útiles (votes_up)')
+    ax.set_xlabel('Cantidad de votos útiles')
+    ax.set_ylabel('Número de reseñas')
+    fig.tight_layout()
+    fig.savefig(CARPETA_GRAFICAS / 'distribucion_votos_utiles.png', dpi=120)
+    plt.close(fig)
+    print('\n' + '=' * 60)
+    print('3. GRÁFICAS GUARDADAS')
+    print('=' * 60)
+    print(f'Carpeta: {CARPETA_GRAFICAS}')
+    print('  - distribucion_recomendacion.png')
+    print('  - distribucion_tiempo_juego.png')
+    print('  - distribucion_votos_utiles.png')
+
+def seleccion_variables() -> None:
+    print('\n' + '=' * 60)
+    print('4. SELECCIÓN DE VARIABLES PARA K-MEANS (ETAPA FUTURA)')
+    print('=' * 60)
+    print('\nVariables numéricas propuestas:\n1. playtime_forever\n   Agrupa jugadores con hábitos parecidos (poco vs. mucho tiempo en el juego).\n   Los perfiles de experiencia suelen diferir en el contenido de la reseña.\n2. votes_up\n   Separa opiniones poco vistas de las que la comunidad considera útiles,\n   es decir, reseñas con mayor o menor impacto social.\n3. recommended (como 0 o 1)\n   Aunque es binaria, combinada con otras dimensiones ayuda a formar\n   clusters de usuarios satisfechos frente a insatisfechos.\nSobre review_text:\n   K-Means no acepta texto directamente. En una etapa posterior se puede:\n   - usar la longitud del texto como variable numérica;\n   - aplicar TF-IDF o embeddings y reducir dimensiones (PCA);\n   - calcular una puntuación de sentimiento (positivo/negativo).\n   Esas transformaciones producirían columnas numéricas adicionales para el modelo.\n')
+
+def main() -> None:
+    df = pd.read_csv(RUTA_CSV)
+    cargar_y_explorar(df)
+    analizar_variables(df)
+    crear_graficas(df)
+    seleccion_variables()
+if __name__ == '__main__':
+    main()
